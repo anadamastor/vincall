@@ -46,3 +46,10 @@ Sound starts after your first click, because browsers block audio until then.
 To play your own recording on the title menu, save the audio file in this folder as `vincall.m4a` (next to `index.html`). It plays once each time the title menu opens (on load and when you return after a game). To use a different name or format (for example `menu.mp3` or `menu.wav`), change `MENU_SRC` near the top of the audio section in `index.html`.
 
 Browsers don't allow sound until you interact with the page, so the first click on the title screen turns the music on, and the second click starts the game. If there is no `vincall.m4a`, the game skips this step.
+
+## Phones, tablets and fullscreen
+
+- The game fills the screen on computers, iPads and phones. The playfield stretches to the shape of your screen.
+- **Phones and tablets:** hold the device sideways (landscape). Drag a finger to aim and hold to shoot. The crosshair sits just above your finger so it stays visible. Use the on-screen **RELOAD** and **SWAP** buttons for reload and weapon switching. A second finger can tap the buttons while the first keeps aiming.
+- **Computer:** press **F** or click the FULLSCREEN button on the title screen.
+- **iPhone:** Safari has no fullscreen button for web pages. Tap Share → **Add to Home Screen** and open Vincall from the icon to play without the browser bars.
