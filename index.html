@@ -191,6 +191,38 @@ for (const k in SPRITES) {
   IMG_FLASH[k] = makeSprite(SPRITES[k], COLORS[k], SCALE[k], true, k);
 }
 
+// ---------- retro logo (pixel font, chunky 3D look) ----------
+const LOGO_FONT = {
+  V: ["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],
+  I: ["#####","..#..","..#..","..#..","..#..","..#..","#####"],
+  N: ["#...#","##..#","##..#","#.#.#","#..##","#..##","#...#"],
+  C: [".####","#....","#....","#....","#....","#....",".####"],
+  A: [".###.","#...#","#...#","#####","#...#","#...#","#...#"],
+  L: ["#....","#....","#....","#....","#....","#....","#####"]
+};
+const LOGO = (() => {
+  const word = "VINCALL", s = 13, depth = 8;
+  const cols = word.length * 6 - 1; // 5 columns per letter + 1 gap
+  const c = document.createElement("canvas");
+  c.width = cols * s + depth + 4; c.height = 7 * s + depth + 4;
+  const g = c.getContext("2d");
+  const band = ["#5dff7a", "#5dff7a", "#9dff5d", "#ffd23f", "#ffd23f", "#ff9f43", "#ff5d73"];
+  const cells = [];
+  [...word].forEach((ch, li) => LOGO_FONT[ch].forEach((row, y) => [...row].forEach((v, x) => {
+    if (v === "#") cells.push([li * 6 + x, y]);
+  })));
+  for (let d = depth; d >= 1; d--) {          // extruded purple shadow
+    g.fillStyle = d > depth / 2 ? "#2a1458" : "#5b2ec7";
+    cells.forEach(([x, y]) => g.fillRect(x * s + d, y * s + d, s, s));
+  }
+  cells.forEach(([x, y]) => {                  // front face: colour bands per row
+    g.fillStyle = band[y]; g.fillRect(x * s, y * s, s, s);
+    g.fillStyle = "rgba(255,255,255,.35)"; g.fillRect(x * s, y * s, s, 3); // top highlight
+    g.fillStyle = "rgba(0,0,0,.18)"; g.fillRect(x * s, y * s + s - 2, s, 2);
+  });
+  return c;
+})();
+
 // ---------- audio ----------
 let actx = null;
 function audio() {
@@ -519,7 +551,8 @@ function draw() {
   stars.forEach(s => { ctx.fillStyle = s.r > 1 ? "#cfd8ff" : "#6a74a8"; ctx.fillRect(s.x | 0, s.y | 0, s.r, s.r); });
 
   if (state === "title") {
-    text("VINCALL", W / 2, 220, 72, "#5dff7a");
+    const bob = Math.sin(performance.now() / 500) * 4;
+    ctx.drawImage(LOGO, (W - LOGO.width) / 2 | 0, (125 + bob) | 0);
     text("Kill 5 aliens in wave 1, 10 in wave 2 ... 60 in wave 12, then beat the boss", W / 2, 280, 18, "#cfd8ff");
     if (isTouch) {
       text("DRAG: aim    HOLD: shoot    buttons: reload / switch weapon", W / 2, 330, 18, "#ffd23f");
@@ -540,6 +573,9 @@ function draw() {
       text(document.fullscreenElement || document.webkitFullscreenElement ? "EXIT FULL" : "FULLSCREEN", b.x + b.w / 2, b.y + 24, 15, "#cfd8ff");
     }
     if (best) text("BEST: " + best, W / 2, 540, 18, "#c77dff");
+    // credit in the corner
+    ctx.drawImage(IMG.grunt, 14, H - 44, 22, 16);
+    text("made by Eddie, David and Ervis", 44, H - 30, 14, "#9aa5ff", "left");
     ctx.restore(); drawCursor(); return;
   }
 
