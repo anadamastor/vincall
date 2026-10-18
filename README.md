@@ -43,6 +43,6 @@ Sound starts after your first click, because browsers block audio until then.
 
 ## Menu music
 
-To play your own recording on the title menu, save the audio file in this folder as `vincall.m4a` (next to `index.html`). It loops until the game starts and comes back when you return to the menu. To use a different name or format (for example `menu.mp3` or `menu.wav`), change `MENU_SRC` near the top of the audio section in `index.html`.
+To play your own recording on the title menu, save the audio file in this folder as `vincall.m4a` (next to `index.html`). It plays once each time the title menu opens (on load and when you return after a game). To use a different name or format (for example `menu.mp3` or `menu.wav`), change `MENU_SRC` near the top of the audio section in `index.html`.
 
 Browsers don't allow sound until you interact with the page, so the first click on the title screen turns the music on, and the second click starts the game. If there is no `vincall.m4a`, the game skips this step.

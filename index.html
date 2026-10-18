@@ -183,14 +183,16 @@ function beep(freq, dur, type = "square", vol = 0.08, slide = 0) {
 // Put your recording next to index.html and name it vincall.m4a (or change MENU_SRC).
 const MENU_SRC = "vincall.m4a";
 const menuMusic = new Audio(MENU_SRC);
-menuMusic.loop = true; menuMusic.volume = 0.7;
+menuMusic.loop = false; menuMusic.volume = 0.7; // plays once each time the menu opens
 let musicOK = true, musicUnlocked = false; // musicOK=false when the file is missing
 menuMusic.addEventListener("error", () => { musicOK = false; });
-function playMenuMusic() {
+function playMenuMusic() { // restart the clip from the beginning
   if (!musicOK) return;
+  menuMusic.currentTime = 0;
   const p = menuMusic.play();
   if (p) p.then(() => { musicUnlocked = true; }).catch(() => {});
 }
+function unlockMusic() { if (musicOK && !musicUnlocked) playMenuMusic(); } // first user gesture
 function stopMenuMusic() { menuMusic.pause(); menuMusic.currentTime = 0; }
 playMenuMusic(); // works only if the browser allows autoplay; otherwise starts on first click
 
@@ -300,7 +302,7 @@ cv.addEventListener("mousedown", e => {
   if (state === "over" || state === "won") { state = "title"; playMenuMusic(); return; }
   if (state === "title") {
     const needUnlock = musicOK && !musicUnlocked;
-    playMenuMusic();
+    unlockMusic();
     if (mouse.y > 370 && mouse.y < 430 && mouse.x > 230 && mouse.x < 340) { changeWave(-1); return; }
     if (mouse.y > 370 && mouse.y < 430 && mouse.x > 460 && mouse.x < 570) { changeWave(1); return; }
     if (needUnlock) return; // first click only turns the music on
@@ -317,7 +319,7 @@ function changeWave(d) {
 }
 window.addEventListener("keydown", e => {
   if (state === "title") {
-    playMenuMusic();
+    unlockMusic();
     if (e.key === "ArrowLeft" || e.key === "ArrowDown") changeWave(-1);
     if (e.key === "ArrowRight" || e.key === "ArrowUp") changeWave(1);
   }
