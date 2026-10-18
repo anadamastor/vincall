@@ -52,4 +52,5 @@ Browsers don't allow sound until you interact with the page, so the first click 
 - The game fills the screen on computers, iPads and phones. The playfield stretches to the shape of your screen.
 - **Phones and tablets:** hold the device sideways (landscape). Drag a finger to aim and hold to shoot. The crosshair sits just above your finger so it stays visible. Use the on-screen **RELOAD** and **SWAP** buttons for reload and weapon switching. A second finger can tap the buttons while the first keeps aiming.
 - **Computer:** press **F** or click the FULLSCREEN button on the title screen.
-- **iPhone:** Safari has no fullscreen button for web pages. Tap Share → **Add to Home Screen** and open Vincall from the icon to play without the browser bars.
+- **iPhone:** Safari has no fullscreen button for web pages. Tap Share → **Add to Home Screen** and open Vincall from the icon. It then runs fullscreen and landscape, with no browser bars.
+- **Android and iPad:** the first tap on the title screen goes fullscreen automatically.
