@@ -48,7 +48,8 @@ window.addEventListener("orientationchange", () => setTimeout(resize, 150));
 resize();
 
 // ---------- config ----------
-const WAVES = 12, WAVE_LEN = 60, START_LIVES = 5;
+const WAVES = 12, START_LIVES = 5;
+const quotaFor = w => 5 * w; // kills needed to clear a wave: 5, 10, ... 60
 const WEAPONS = {
   pistol: { name: "PISTOL", mag: 20, reload: 1.0, auto: false, rate: 0,    spread: 0 },
   ar:     { name: "AR",     mag: 30, reload: 1.6, auto: true,  rate: 0.09, spread: 0.05 }
@@ -239,7 +240,7 @@ const sfx = {
 
 // ---------- state ----------
 let state = "title"; // title | playing | over | won
-let wave, waveTime, spawnTimer, aliens, bullets, particles, stars, lives, score, ammo;
+let wave, waveTime, waveKills, spawnTimer, aliens, bullets, particles, stars, lives, score, ammo;
 let reloading, reloadLeft, banner, bossSpawned, shake;
 let weapon = "pistol", mags = {}, held = false, fireCd = 0;
 const cur = () => WEAPONS[weapon];
@@ -251,7 +252,7 @@ const mouse = { x: W / 2, y: H / 2 };
 stars = Array.from({ length: 90 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: 20 + Math.random() * 60, r: Math.random() < 0.2 ? 2 : 1 }));
 
 function reset() {
-  wave = selWave; waveTime = 0; spawnTimer = 1; aliens = []; bullets = []; particles = [];
+  wave = selWave; waveTime = 0; waveKills = 0; spawnTimer = 1; aliens = []; bullets = []; particles = [];
   lives = START_LIVES; score = 0; reloading = false; reloadLeft = 0;
   weapon = "pistol"; held = false; fireCd = 0;
   for (const k in WEAPONS) mags[k] = WEAPONS[k].mag;
@@ -441,25 +442,24 @@ function update(dt) {
   fireCd = Math.max(0, fireCd - dt);
   if (held && cur().auto && fireCd <= 0) shoot();
 
-  // wave timing
+  // wave progress: clear a wave by killing 5 x wave number aliens
   waveTime += dt;
+  const quota = quotaFor(wave);
   const bossAlive = aliens.some(a => a.type === "boss");
-  if (waveTime >= WAVE_LEN) {
+  if (waveKills >= quota) {
     if (wave === WAVES) {
       if (!bossAlive && bossSpawned) { endGame(true); return; }
-      // overtime: wait for boss to die
+      // quota done: still waiting for the boss to die
     } else {
-      wave++; waveTime = 0; spawnTimer = 1.5;
-      aliens = aliens.filter(a => a.y < 0 ? false : (burst(a.x + a.w / 2, a.y + a.h / 2, COLORS[a.type], 8), false));
+      wave++; waveTime = 0; waveKills = 0; spawnTimer = 1.5;
       banner = { text: "WAVE " + wave, t: 2.2 }; sfx.wave();
     }
   }
 
-  // spawning
-  const stillSpawning = waveTime < WAVE_LEN;
+  // spawning: only spawn while kills + aliens on screen are below the quota
   if (wave === WAVES && !bossSpawned && waveTime > 3) { spawnAlien("boss"); bossSpawned = true; banner = { text: "BOSS!", t: 2 }; sfx.lose(); }
   spawnTimer -= dt;
-  if (stillSpawning && spawnTimer <= 0) {
+  if (spawnTimer <= 0 && waveKills + aliens.length < quotaFor(wave)) {
     spawnTimer = Math.max(0.9, 2.2 - 0.1 * wave) * (0.8 + Math.random() * 0.4);
     spawnAlien(pickType());
   }
@@ -484,7 +484,7 @@ function update(dt) {
         b.dead = true; a.hp--; a.flash = 0.08; sfx.hit();
         burst(b.x, b.y, "#fff", 3, 100);
         if (a.hp <= 0) {
-          score += POINTS[a.type]; sfx.kill();
+          score += POINTS[a.type]; waveKills++; sfx.kill();
           burst(a.x + a.w / 2, a.y + a.h / 2, COLORS[a.type], a.type === "boss" ? 80 : 18, a.type === "boss" ? 320 : 180);
         }
       }
@@ -520,7 +520,7 @@ function draw() {
 
   if (state === "title") {
     text("VINCALL", W / 2, 220, 72, "#5dff7a");
-    text("Survive 12 waves and defeat the boss", W / 2, 280, 20, "#cfd8ff");
+    text("Kill 5 aliens in wave 1, 10 in wave 2 ... 60 in wave 12, then beat the boss", W / 2, 280, 18, "#cfd8ff");
     if (isTouch) {
       text("DRAG: aim    HOLD: shoot    buttons: reload / switch weapon", W / 2, 330, 18, "#ffd23f");
       text("pistol or assault rifle (hold to fire)", W / 2, 360, 16, "#cfd8ff");
@@ -595,8 +595,7 @@ function draw() {
 
   text("SCORE " + score, 16, 28, 20, "#fff", "left");
   text("WAVE " + wave + "/" + WAVES, W / 2, 28, 20, "#ffd23f");
-  const left = wave === WAVES && waveTime >= WAVE_LEN ? 0 : Math.ceil(WAVE_LEN - waveTime);
-  text(left + "s", W / 2, 50, 16, "#6a74a8");
+  text("KILLS " + Math.min(waveKills, quotaFor(wave)) + "/" + quotaFor(wave), W / 2, 50, 16, "#6a74a8");
   text("♥".repeat(lives) + "♡".repeat(START_LIVES - lives), W - 16, 28, 22, "#ff5d73", "right");
 
   if (banner && state === "playing") {

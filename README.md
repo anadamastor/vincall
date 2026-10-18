@@ -35,8 +35,8 @@ Then go to http://localhost:8000 in your browser. Press Ctrl+C in the terminal t
 - Assault rifle (AR): 30 bullets, 1.6 second reload, hold to fire automatically, slightly inaccurate.
 - Each weapon keeps its own ammo. You have 5 lives.
 - Each alien that reaches the bottom costs a life.
-- There are 12 waves of 60 seconds, and each is harder than the last.
-- Wave 12 has a boss. Kill it to win. If it reaches the bottom, you lose.
+- There are 12 waves. You clear a wave by killing 5 times the wave number: 5 aliens in wave 1, 10 in wave 2, and so on up to 60 in wave 12. Each wave is harder than the last.
+- Wave 12 has a boss, which counts as one kill. After 60 kills, you win once the boss is dead. If it reaches the bottom, you lose.
 - Your best score is saved in the browser.
 
 Sound starts after your first click, because browsers block audio until then.
