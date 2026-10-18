@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vincall</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #05050f; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; cursor: none; max-width: 100vw; max-height: 100vh; border: 2px solid #223; }
+</style>
+</head>
+<body>
+<canvas id="c" width="800" height="600"></canvas>
+<script>
+"use strict";
+const W = 800, H = 600;
+const cv = document.getElementById("c");
+const ctx = cv.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+// ---------- config ----------
+const WAVES = 12, WAVE_LEN = 60, START_LIVES = 5;
+const WEAPONS = {
+  pistol: { name: "PISTOL", mag: 20, reload: 1.0, auto: false, rate: 0,    spread: 0 },
+  ar:     { name: "AR",     mag: 30, reload: 1.6, auto: true,  rate: 0.09, spread: 0.05 }
+};
+const WEAPON_KEYS = ["pistol", "ar"];
+const BULLET_SPEED = 1400;
+
+// ---------- sprites ----------
+const SPRITES = {
+  grunt: [
+    "..#.....#..",
+    "...#...#...",
+    "..#######..",
+    ".##.###.##.",
+    "###########",
+    "#.#######.#",
+    "#.#.....#.#",
+    "...##.##..."],
+  tough: [
+    "...#####...",
+    ".#########.",
+    "###########",
+    "##..###..##",
+    "###########",
+    "..##...##..",
+    ".##.###.##.",
+    "##.......##"],
+  heavy: [
+    "#.........#",
+    "##.#####.##",
+    ".#########.",
+    "###.###.###",
+    "###########",
+    ".#.#####.#.",
+    "#..#...#..#",
+    ".##.....##."],
+  // inspired by the doodle: tiny scuttling bug
+  bug: [
+    ".#...#.",
+    "..###..",
+    ".#####.",
+    "#.###.#",
+    "..#.#..",
+    ".#...#."],
+  // flying saucer with a row of lights
+  saucer: [
+    "....#####....",
+    "...#######...",
+    ".###########.",
+    "#############",
+    "#o#o#o#o#o#o#",
+    ".###########.",
+    "...#.....#...",
+    "..#.......#.."],
+  // one big eye with lashes
+  eyeball: [
+    "#.#.#.#.#",
+    ".#######.",
+    "#########",
+    "###www###",
+    "##wwoww##",
+    "##wooow##",
+    "###www###",
+    "#########",
+    ".#######."],
+  // toothy chomper
+  chomper: [
+    "..#######..",
+    ".#########.",
+    "##o#####o##",
+    "###########",
+    "#w#w#w#w#w#",
+    "#ooooooooo#",
+    "#w#w#w#w#w#",
+    ".#########.",
+    "..#..#..#.."],
+  // spiky-haired head
+  spikehead: [
+    "#.#.#.#.#.#",
+    "#.#.#.#.#.#",
+    "###########",
+    "###########",
+    "##ww###ww##",
+    "##wo###ow##",
+    "###########",
+    "##ooooooo##",
+    ".#########.",
+    "..#######.."],
+  // giant toothy spiky boss
+  boss: [
+    "#.#.#.#.#.#.#.#.#",
+    ".###############.",
+    "#################",
+    "##ww#########ww##",
+    "##wo#########ow##",
+    "#################",
+    "#w#w#w#w#w#w#w#w#",
+    "#ooooooooooooooo#",
+    "#w#w#w#w#w#w#w#w#",
+    ".###############.",
+    "#.#.#.#.#.#.#.#.#"]
+};
+const COLORS = { grunt: "#5dff7a", tough: "#ffd23f", heavy: "#ff5d73", bug: "#e0e0ff", saucer: "#9aa5ff",
+                 eyeball: "#ff8fd8", chomper: "#4dd8ff", spikehead: "#ff9f43", boss: "#c77dff" };
+const SCALE = { grunt: 4, tough: 4, heavy: 5, bug: 4, saucer: 4, eyeball: 5, chomper: 5, spikehead: 5, boss: 8 };
+const HP = { grunt: 1, tough: 2, heavy: 3, bug: 1, saucer: 1, eyeball: 2, chomper: 2, spikehead: 3, boss: 30 };
+const POINTS = { grunt: 10, tough: 25, heavy: 50, bug: 15, saucer: 30, eyeball: 30, chomper: 40, spikehead: 60, boss: 1000 };
+const AUTO_EYES = new Set(["grunt", "tough", "heavy"]);
+// movement personality: speed multiplier, sway amplitude, sway frequency
+const MOVE = {
+  bug:      { spd: 1.6, amp: [30, 50],  freq: [2.0, 3.0] },
+  saucer:   { spd: 1.0, amp: [100, 160], freq: [1.2, 1.8] },
+  eyeball:  { spd: 0.7, amp: [50, 90],  freq: [0.5, 1.0] }
+};
+
+function makeSprite(rows, color, scale, flash, type) {
+  const c = document.createElement("canvas");
+  c.width = rows[0].length * scale; c.height = rows.length * scale;
+  const g = c.getContext("2d");
+  rows.forEach((r, y) => [...r].forEach((ch, x) => {
+    if (ch === "#") g.fillStyle = flash ? "#fff" : color;
+    else if (ch === "w") g.fillStyle = "#fff";
+    else if (ch === "o") g.fillStyle = flash ? "#fff" : "#05050f";
+    else return;
+    g.fillRect(x * scale, y * scale, scale, scale);
+  }));
+  // eyes
+  if (!flash && AUTO_EYES.has(type)) {
+    g.fillStyle = "#05050f";
+    const ey = Math.floor(rows.length * 0.4), mid = rows[0].length / 2;
+    g.fillRect((mid - 2.5) * scale, ey * scale, scale, scale);
+    g.fillRect((mid + 1.5) * scale, ey * scale, scale, scale);
+  }
+  return c;
+}
+const IMG = {}, IMG_FLASH = {};
+for (const k in SPRITES) {
+  IMG[k] = makeSprite(SPRITES[k], COLORS[k], SCALE[k], false, k);
+  IMG_FLASH[k] = makeSprite(SPRITES[k], COLORS[k], SCALE[k], true, k);
+}
+
+// ---------- audio ----------
+let actx = null;
+function audio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (actx && actx.state === "suspended") actx.resume();
+  return actx;
+}
+function beep(freq, dur, type = "square", vol = 0.08, slide = 0) {
+  const a = audio(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, a.currentTime);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), a.currentTime + dur);
+  g.gain.setValueAtTime(vol, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(); o.stop(a.currentTime + dur);
+}
+// ---------- menu music (your own audio file) ----------
+// Put your recording next to index.html and name it vincall.m4a (or change MENU_SRC).
+const MENU_SRC = "vincall.m4a";
+const menuMusic = new Audio(MENU_SRC);
+menuMusic.loop = true; menuMusic.volume = 0.7;
+let musicOK = true, musicUnlocked = false; // musicOK=false when the file is missing
+menuMusic.addEventListener("error", () => { musicOK = false; });
+function playMenuMusic() {
+  if (!musicOK) return;
+  const p = menuMusic.play();
+  if (p) p.then(() => { musicUnlocked = true; }).catch(() => {});
+}
+function stopMenuMusic() { menuMusic.pause(); menuMusic.currentTime = 0; }
+playMenuMusic(); // works only if the browser allows autoplay; otherwise starts on first click
+
+const sfx = {
+  shoot: () => beep(900, 0.12, "square", 0.07, -700),
+  empty: () => beep(180, 0.05, "square", 0.05),
+  hit: () => beep(300, 0.06, "square", 0.06, -100),
+  kill: () => beep(400, 0.25, "sawtooth", 0.08, -330),
+  reload: () => { beep(240, 0.08, "square", 0.06); setTimeout(() => beep(360, 0.08, "square", 0.06), 700); },
+  reloaded: () => beep(600, 0.1, "square", 0.07, 300),
+  lose: () => beep(220, 0.5, "sawtooth", 0.1, -180),
+  wave: () => { beep(440, 0.12, "square"); setTimeout(() => beep(660, 0.18, "square"), 130); },
+  win: () => [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.25, "square", 0.08), i * 150)),
+  over: () => [400, 300, 200, 120].forEach((f, i) => setTimeout(() => beep(f, 0.3, "sawtooth", 0.08), i * 180))
+};
+
+// ---------- state ----------
+let state = "title"; // title | playing | over | won
+let wave, waveTime, spawnTimer, aliens, bullets, particles, stars, lives, score, ammo;
+let reloading, reloadLeft, banner, bossSpawned, shake;
+let weapon = "pistol", mags = {}, held = false, fireCd = 0;
+const cur = () => WEAPONS[weapon];
+let selWave = 1; // wave chosen on the title screen
+let best = 0;
+try { best = +localStorage.getItem("alienBest") || 0; } catch (e) {}
+const mouse = { x: W / 2, y: H / 2 };
+
+stars = Array.from({ length: 90 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: 20 + Math.random() * 60, r: Math.random() < 0.2 ? 2 : 1 }));
+
+function reset() {
+  wave = selWave; waveTime = 0; spawnTimer = 1; aliens = []; bullets = []; particles = [];
+  lives = START_LIVES; score = 0; reloading = false; reloadLeft = 0;
+  weapon = "pistol"; held = false; fireCd = 0;
+  for (const k in WEAPONS) mags[k] = WEAPONS[k].mag;
+  ammo = mags[weapon];
+  banner = { text: "WAVE " + wave, t: 2 }; bossSpawned = false; shake = 0;
+}
+
+function startReload() {
+  if (reloading || ammo === cur().mag) return;
+  reloading = true; reloadLeft = cur().reload; sfx.reload();
+}
+
+function switchWeapon(key) {
+  if (key === weapon || state !== "playing") return;
+  mags[weapon] = ammo;
+  weapon = key; ammo = mags[weapon];
+  reloading = false; fireCd = 0.15;
+  beep(520, 0.06, "square", 0.05, 200);
+}
+
+function shoot() {
+  if (reloading) return;
+  if (ammo <= 0) { sfx.empty(); startReload(); return; }
+  ammo--; sfx.shoot(); fireCd = cur().rate;
+  const sx = mouse.x, sy = H + 5;
+  const ang = Math.atan2(mouse.y - sy, mouse.x - sx) + (Math.random() - 0.5) * 2 * cur().spread;
+  bullets.push({ x: sx, y: sy, vx: Math.cos(ang) * BULLET_SPEED, vy: Math.sin(ang) * BULLET_SPEED });
+  burst(sx, H - 4, "#ffe9a8", 4, 80);
+}
+
+function spawnAlien(type) {
+  const sprite = IMG[type];
+  const w = sprite.width, h = sprite.height;
+  const m = MOVE[type];
+  const rnd = ([a, b]) => a + Math.random() * (b - a);
+  const speed = type === "boss" ? 11 : (20 + wave * 3.5 + Math.random() * 8) * (m ? m.spd : 1);
+  aliens.push({
+    type, w, h, x: 30 + Math.random() * (W - 60 - w), y: -h, baseX: 0,
+    hp: HP[type], maxHp: HP[type], speed,
+    amp: type === "boss" ? 220 : m ? rnd(m.amp) : 15 + Math.random() * 30,
+    freq: m ? rnd(m.freq) : 0.6 + Math.random() * 1.2, phase: Math.random() * 6.28, t: 0, flash: 0
+  });
+  const a = aliens[aliens.length - 1]; a.baseX = a.x;
+  if (type === "boss") { a.baseX = W / 2 - w / 2; }
+}
+
+function pickType() {
+  // weighted pool: new monster types unlock as waves go on
+  const pool = ["grunt", "grunt", "grunt", "grunt"];
+  if (wave >= 2) pool.push("tough", "bug", "bug");
+  if (wave >= 3) pool.push("saucer", "saucer");
+  if (wave >= 5) pool.push("eyeball", "eyeball");
+  if (wave >= 6) pool.push("chomper", "chomper");
+  if (wave >= 8) pool.push("heavy");
+  if (wave >= 9) pool.push("spikehead", "spikehead");
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function burst(x, y, color, n, speed = 160) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * 6.28, s = speed * (0.3 + Math.random());
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.4 + Math.random() * 0.4, color });
+  }
+}
+
+// ---------- input ----------
+function toCanvas(e) {
+  const r = cv.getBoundingClientRect();
+  mouse.x = (e.clientX - r.left) * (W / r.width);
+  mouse.y = (e.clientY - r.top) * (H / r.height);
+}
+cv.addEventListener("mousemove", toCanvas);
+cv.addEventListener("contextmenu", e => e.preventDefault());
+cv.addEventListener("mousedown", e => {
+  toCanvas(e); audio();
+  if (state === "over" || state === "won") { state = "title"; playMenuMusic(); return; }
+  if (state === "title") {
+    const needUnlock = musicOK && !musicUnlocked;
+    playMenuMusic();
+    if (mouse.y > 370 && mouse.y < 430 && mouse.x > 230 && mouse.x < 340) { changeWave(-1); return; }
+    if (mouse.y > 370 && mouse.y < 430 && mouse.x > 460 && mouse.x < 570) { changeWave(1); return; }
+    if (needUnlock) return; // first click only turns the music on
+    stopMenuMusic(); reset(); state = "playing"; sfx.wave(); return;
+  }
+  held = true;
+  if (fireCd <= 0) shoot();
+});
+window.addEventListener("mouseup", () => { held = false; });
+window.addEventListener("blur", () => { held = false; });
+function changeWave(d) {
+  selWave = ((selWave - 1 + d + WAVES) % WAVES) + 1;
+  beep(500, 0.05, "square", 0.05);
+}
+window.addEventListener("keydown", e => {
+  if (state === "title") {
+    playMenuMusic();
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") changeWave(-1);
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") changeWave(1);
+  }
+  if (e.key === "r" || e.key === "R") { if (state === "playing") startReload(); }
+  if (e.key === "1") switchWeapon("pistol");
+  if (e.key === "2") switchWeapon("ar");
+  if (e.key === "q" || e.key === "Q") switchWeapon(WEAPON_KEYS[(WEAPON_KEYS.indexOf(weapon) + 1) % WEAPON_KEYS.length]);
+});
+
+// ---------- update ----------
+function endGame(won) {
+  state = won ? "won" : "over";
+  won ? sfx.win() : sfx.over();
+  if (score > best) { best = score; try { localStorage.setItem("alienBest", best); } catch (e) {} }
+}
+
+function update(dt) {
+  stars.forEach(s => { s.y += s.s * dt; if (s.y > H) { s.y = 0; s.x = Math.random() * W; } });
+  particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
+  particles = particles.filter(p => p.life > 0);
+  if (state !== "playing") return;
+
+  shake = Math.max(0, shake - dt * 30);
+  if (banner) { banner.t -= dt; if (banner.t <= 0) banner = null; }
+
+  // reload
+  if (reloading) {
+    reloadLeft -= dt;
+    if (reloadLeft <= 0) { reloading = false; ammo = cur().mag; sfx.reloaded(); }
+  }
+
+  // weapon fire rate / automatic fire
+  fireCd = Math.max(0, fireCd - dt);
+  if (held && cur().auto && fireCd <= 0) shoot();
+
+  // wave timing
+  waveTime += dt;
+  const bossAlive = aliens.some(a => a.type === "boss");
+  if (waveTime >= WAVE_LEN) {
+    if (wave === WAVES) {
+      if (!bossAlive && bossSpawned) { endGame(true); return; }
+      // overtime: wait for boss to die
+    } else {
+      wave++; waveTime = 0; spawnTimer = 1.5;
+      aliens = aliens.filter(a => a.y < 0 ? false : (burst(a.x + a.w / 2, a.y + a.h / 2, COLORS[a.type], 8), false));
+      banner = { text: "WAVE " + wave, t: 2.2 }; sfx.wave();
+    }
+  }
+
+  // spawning
+  const stillSpawning = waveTime < WAVE_LEN;
+  if (wave === WAVES && !bossSpawned && waveTime > 3) { spawnAlien("boss"); bossSpawned = true; banner = { text: "BOSS!", t: 2 }; sfx.lose(); }
+  spawnTimer -= dt;
+  if (stillSpawning && spawnTimer <= 0) {
+    spawnTimer = Math.max(0.9, 2.2 - 0.1 * wave) * (0.8 + Math.random() * 0.4);
+    spawnAlien(pickType());
+  }
+
+  // bullets
+  for (const b of bullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
+  bullets = bullets.filter(b => b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+
+  // aliens
+  for (const a of aliens) {
+    a.t += dt; a.y += a.speed * dt; a.flash = Math.max(0, a.flash - dt);
+    a.x = a.baseX + Math.sin(a.t * a.freq * (a.type === "boss" ? 0.5 : 1) + a.phase) * a.amp;
+    a.x = Math.max(4, Math.min(W - a.w - 4, a.x));
+  }
+
+  // collisions
+  for (const b of bullets) {
+    for (const a of aliens) {
+      if (a.hp <= 0 || b.dead) continue;
+      const pad = 6; // forgiving hitbox
+      if (b.x > a.x - pad && b.x < a.x + a.w + pad && b.y > a.y - pad && b.y < a.y + a.h + pad) {
+        b.dead = true; a.hp--; a.flash = 0.08; sfx.hit();
+        burst(b.x, b.y, "#fff", 3, 100);
+        if (a.hp <= 0) {
+          score += POINTS[a.type]; sfx.kill();
+          burst(a.x + a.w / 2, a.y + a.h / 2, COLORS[a.type], a.type === "boss" ? 80 : 18, a.type === "boss" ? 320 : 180);
+        }
+      }
+    }
+  }
+  bullets = bullets.filter(b => !b.dead);
+  aliens = aliens.filter(a => a.hp > 0);
+
+  // escapes
+  for (const a of aliens) {
+    if (a.y + a.h >= H) {
+      a.hp = 0; shake = 8; sfx.lose();
+      burst(a.x + a.w / 2, H - 10, "#ff3355", 14);
+      lives -= a.type === "boss" ? lives : 1;
+    }
+  }
+  aliens = aliens.filter(a => a.hp > 0);
+  if (lives <= 0) { lives = 0; endGame(false); }
+}
+
+// ---------- draw ----------
+function text(str, x, y, size, color, align = "center") {
+  ctx.font = `bold ${size}px "Courier New", monospace`;
+  ctx.textAlign = align; ctx.fillStyle = color; ctx.fillText(str, x, y);
+}
+
+function draw() {
+  ctx.fillStyle = "#05050f"; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+
+  stars.forEach(s => { ctx.fillStyle = s.r > 1 ? "#cfd8ff" : "#6a74a8"; ctx.fillRect(s.x | 0, s.y | 0, s.r, s.r); });
+
+  if (state === "title") {
+    text("VINCALL", W / 2, 220, 72, "#5dff7a");
+    text("Survive 12 waves and defeat the boss", W / 2, 280, 20, "#cfd8ff");
+    text("MOUSE: aim    CLICK: shoot    R: reload", W / 2, 330, 18, "#ffd23f");
+    text("1: pistol   2: assault rifle (hold to fire)   Q: switch", W / 2, 360, 16, "#cfd8ff");
+    text("◄", 285, 412, 40, "#ffd23f");
+    text("WAVE " + selWave, W / 2, 410, 36, "#fff");
+    text("►", 515, 412, 40, "#ffd23f");
+    text("click the arrows or use the arrow keys to pick a wave", W / 2, 440, 14, "#6a74a8");
+    if (Math.floor(performance.now() / 500) % 2) text(musicOK && !musicUnlocked ? "CLICK TO TURN ON SOUND" : "CLICK TO START", W / 2, 495, 28, "#fff");
+    if (best) text("BEST: " + best, W / 2, 540, 18, "#c77dff");
+    ctx.restore(); drawCursor(); return;
+  }
+
+  // aliens
+  for (const a of aliens) {
+    ctx.drawImage(a.flash > 0 ? IMG_FLASH[a.type] : IMG[a.type], a.x | 0, a.y | 0);
+    if (a.maxHp > 1) {
+      const bw = a.w, f = a.hp / a.maxHp;
+      ctx.fillStyle = "#331"; ctx.fillRect(a.x, a.y - 8, bw, 4);
+      ctx.fillStyle = a.type === "boss" ? "#c77dff" : "#ff5d73"; ctx.fillRect(a.x, a.y - 8, bw * f, 4);
+    }
+  }
+
+  // bullets
+  for (const b of bullets) {
+    ctx.strokeStyle = "rgba(255,233,168,.5)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x - b.vx * 0.02, b.y - b.vy * 0.02); ctx.stroke();
+    ctx.fillStyle = "#ffe9a8"; ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
+  }
+
+  // particles
+  for (const p of particles) { ctx.globalAlpha = Math.min(1, p.life * 2); ctx.fillStyle = p.color; ctx.fillRect(p.x | 0, p.y | 0, 3, 3); }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // danger line
+  ctx.fillStyle = "rgba(255,51,85,.25)"; ctx.fillRect(0, H - 3, W, 3);
+
+  // HUD
+  const mag = cur().mag, step = Math.min(11, 330 / mag);
+  for (let i = 0; i < mag; i++) {
+    const x = 16 + i * step, y = H - 44, full = i < ammo;
+    ctx.fillStyle = full ? "#ffd23f" : "#2a2a3a"; ctx.fillRect(x, y + 8, 7, 20);
+    ctx.fillStyle = full ? "#ff9f43" : "#2a2a3a"; ctx.fillRect(x, y, 7, 8);
+  }
+  text(cur().name + "  " + ammo + "/" + mag, 16, H - 52, 16, "#cfd8ff", "left");
+  text("1: PISTOL  2: AR  Q: SWITCH", W - 16, H - 14, 13, "#6a74a8", "right");
+  if (reloading) {
+    ctx.fillStyle = "#222"; ctx.fillRect(mouse.x - 20, mouse.y + 24, 40, 5);
+    ctx.fillStyle = "#5dff7a"; ctx.fillRect(mouse.x - 20, mouse.y + 24, 40 * (1 - reloadLeft / cur().reload), 5);
+    text("RELOADING", W / 2, H - 20, 18, "#5dff7a");
+  } else if (ammo === 0 && state === "playing") {
+    if (Math.floor(performance.now() / 250) % 2) text("PRESS R TO RELOAD", W / 2, H - 20, 18, "#ff5d73");
+  }
+
+  text("SCORE " + score, 16, 28, 20, "#fff", "left");
+  text("WAVE " + wave + "/" + WAVES, W / 2, 28, 20, "#ffd23f");
+  const left = wave === WAVES && waveTime >= WAVE_LEN ? 0 : Math.ceil(WAVE_LEN - waveTime);
+  text(left + "s", W / 2, 50, 16, "#6a74a8");
+  text("♥".repeat(lives) + "♡".repeat(START_LIVES - lives), W - 16, 28, 22, "#ff5d73", "right");
+
+  if (banner && state === "playing") {
+    ctx.globalAlpha = Math.min(1, banner.t);
+    text(banner.text, W / 2, 280, 60, "#fff"); ctx.globalAlpha = 1;
+  }
+
+  if (state === "over" || state === "won") {
+    ctx.fillStyle = "rgba(5,5,15,.7)"; ctx.fillRect(0, 0, W, H);
+    if (state === "won") { text("YOU WIN!", W / 2, 240, 64, "#5dff7a"); text("The aliens are defeated.", W / 2, 285, 20, "#cfd8ff"); }
+    else { text("GAME OVER", W / 2, 240, 64, "#ff5d73"); text("Reached wave " + wave, W / 2, 285, 20, "#cfd8ff"); }
+    text("SCORE " + score + "   BEST " + best, W / 2, 335, 24, "#ffd23f");
+    if (Math.floor(performance.now() / 500) % 2) text("CLICK TO PLAY AGAIN", W / 2, 410, 26, "#fff");
+  }
+  drawCursor();
+}
+
+function drawCursor() {
+  const x = mouse.x | 0, y = mouse.y | 0;
+  ctx.strokeStyle = reloading ? "#888" : "#5dff7a"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, 11, 0, 6.283); ctx.stroke();
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.fillRect(x - 18, y - 1, 10, 2); ctx.fillRect(x + 8, y - 1, 10, 2);
+  ctx.fillRect(x - 1, y - 18, 2, 10); ctx.fillRect(x - 1, y + 8, 2, 10);
+}
+
+// ---------- loop ----------
+reset();
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  update(dt); draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
